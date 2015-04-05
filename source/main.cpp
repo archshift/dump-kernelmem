@@ -4,13 +4,6 @@
 
 #include <3ds.h>
 
-int __attribute__((naked))
-    arm11_kernel_execute(int (*func)(void))
-{
-        asm volatile ("svc #0x7B \t\n"
-                      "bx lr     \t\n");
-}
-
 const static u32 KERNELMEM_START = 0xDFF00000;
 const static u32 KERNELMEM_SIZE  = 0x00100000;
 const static u32 CHUNK_SIZE      = 0x400; // 1kB
@@ -19,10 +12,17 @@ const static char* FILENAME      = "/kernelmem_dump.bin";
 
 static u8 tmpbuf[0x400];
 static size_t mem_ctr;
-int dump_chunk()
+
+s32 __attribute__ ((noinline)) dump_chunk()
 {
     memcpy(tmpbuf, (void*)(KERNELMEM_START + mem_ctr), CHUNK_SIZE);
     return 0;
+}
+
+s32 __attribute__ ((naked)) dump_chunk_wrapper()
+{
+    __asm__ __volatile__ ("cpsid aif");
+    dump_chunk();
 }
 
 int main(int argc, char** argv)
@@ -34,7 +34,7 @@ int main(int argc, char** argv)
     printf("Dumping kernel memory...\n");
 
     for (mem_ctr = 0; mem_ctr < KERNELMEM_SIZE; mem_ctr += CHUNK_SIZE) {
-        arm11_kernel_execute(dump_chunk);
+        svcBackdoor(dump_chunk_wrapper);
         printf("Dumping 1kb @ 0x%08lX...\n", KERNELMEM_START + mem_ctr);
         fwrite(tmpbuf, 1, CHUNK_SIZE, out_file);
     }
